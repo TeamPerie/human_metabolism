@@ -61,6 +61,9 @@ myeloid <- c("Dendritic Cell Lineage" , "Neutrophil Lineage", "Mast Cell Lineage
 #-------------------------------------------
 #*******************************************
 
+#only run once per script
+#loads all dictionaries with data from samples in order to optimize functions
+#  used to change data visualization in PCA 
 loadDictionairies <- function() {
   mpp <- 0
   rpp <- 0
@@ -206,6 +209,7 @@ trainGradientBoost <-function(matrixWID) {
   
   #create a dictionary that links lineage to its numeric entry
   predMat <- table(xgb.preds, labels)
+  numToLin <<- Dict$new()
   for(i in 1:ncol(predMat)) {
     numToLin$add(rownames(predMat)[i],colnames(predMat)[i])
   }
@@ -217,6 +221,38 @@ trainGradientBoost <-function(matrixWID) {
  return(findIncorrectSorting(matrixWID, data.frame(mdXBG$pred)))
   
 }
+
+
+predictProgenitors <- function() {
+  progenitorMatrix <- formatData(T, c("Myeloid.","Lymphoid.", "Erythroid.", "Meg."))
+  
+  # for each cell sample, lets generate a lineage prediction from each of our 10 models
+  # and store it in a matrix
+  # we have 10 models because we did 10-fold cross validation
+  output.mat <- matrix(0, nrow = length(rownames(progenitorMatrix)), ncol = nfolds)
+  output.mat.numeric <- matrix(0, nrow = length(rownames(progenitorMatrix)), ncol = nfolds)
+  rownames(output.mat) <- rownames(progenitorMatrix)
+  for(i in 1:length(rownames(progenitorMatrix))){
+    for(j in 1:nfolds){
+      index <- which.max(predict(mdXBG$models[[j]],as.matrix(progenitorMatrix[i,])))
+      output.mat[i,j] <- numToLin$peek(index)
+      output.mat.numeric[i,j] <- index
+      j <- j + 1
+    }
+    i <- i + 1
+  }
+  
+  #change row names of output matrix from cell lineage to cell types
+  for(i in 1:nrow(output.mat)){
+    rownames(output.mat)[i] <- paste(linToType$peek(rownames(output.mat)[i]))
+  }
+  
+  consensus.prediction <- data.frame(apply(output.mat, 1,Consensus))
+  return(consensus.prediction)
+  
+}
+
+
 
 #Identifies most important Genes used in Gradient Boost Algortithm 
 # ***update would to add customization on how to filter: Via Gain, Frequency, or Cover
@@ -333,6 +369,7 @@ generateBoxPlots <- function(genes, tmatrixNoID, fileNameBP) {
 #      : 3 == Cell Type
 #      : 4 == maturity
 # pcaMax: how many charts you want
+#**maybe produces PDF?
 generatePCPlots <- function(matrixWID, incorrectSamples, colorbyWhat, pcaMax, isText, pcaPdfName) {
   
   pca <- prcomp(matrixWID, scale=TRUE)
@@ -349,7 +386,8 @@ generatePCPlots <- function(matrixWID, incorrectSamples, colorbyWhat, pcaMax, is
   
 }
 
-
+#takes two PC's and plots them
+#must input how to sort samples and if you want text or not
 plotPCA <- function(pca, pc1, pc2, incorrectSamples, isText,colorbyWhat, pca.var, pca.var.per) {
   
   pca.data <- data.frame(Sample=rownames(pca$x),
@@ -385,13 +423,12 @@ plotPCA <- function(pca, pc1, pc2, incorrectSamples, isText,colorbyWhat, pca.var
 }
 
 
-
-
-
-
 #-------------------------------------------
 # Minor Helper Functions
 #-------------------------------------------
+
+#for each cell type find out what the most popular lineage classification is and store it in a vector
+Consensus <- function(x){return(names(which.max(table(x))))}
 
 ## get the name of the top numGene measurements (genes) that contribute most to pcX.
 findTopGenes <- function(pca, x, numGenes) {
@@ -525,6 +562,9 @@ matrixNoID <- data_frame() #create global matrixNoID
 loadDictionairies()
 matrixWID <- formatData(T, c("RPP.","MPP.","Meg.", "Myeloid.6","Myeloid.7","Myeloid.8","Myeloid.9","Myeloid.10"))
 incorrectPred <- trainGradientBoost(matrixWID)
+
+progenitorResults <- predictProgenitors()
+
 genes <- identifyImportantGenes(matrixNoID)
 
 ordered.clusters <- kmeansClustering(genes, matrixNoID, 3)
@@ -534,6 +574,13 @@ heatmapSimulator(genes, matrixNoID)
 generateBoxPlots(genes, t(matrixNoID), "BoxPlots_OrderedbyCluster")
 
 generatePCPlots(matrixWID, incorrectPred[,"trueLin"], 2, 7, F, "Me")
+
+
+#To Do
+# Add progenitor prediction
+# Customized function that returns vector of samples of specific type
+  # like periphral cells, umbilical chord cells, various cell types etc
+#
 
 
 
