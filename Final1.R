@@ -222,7 +222,7 @@ trainGradientBoost <-function(matrixWID) {
   
 }
 
-
+#uses global mdXGB to predict the cell lineages of progenitors
 predictProgenitors <- function() {
   progenitorMatrix <- formatData(T, c("Myeloid.","Lymphoid.", "Erythroid.", "Meg."))
   
@@ -237,9 +237,7 @@ predictProgenitors <- function() {
       index <- which.max(predict(mdXBG$models[[j]],as.matrix(progenitorMatrix[i,])))
       output.mat[i,j] <- numToLin$peek(index)
       output.mat.numeric[i,j] <- index
-      j <- j + 1
     }
-    i <- i + 1
   }
   
   #change row names of output matrix from cell lineage to cell types
